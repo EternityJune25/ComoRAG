@@ -1,7 +1,7 @@
 <h1 align="center">ComoRAG</h1>
 <div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/) [![CUDA](https://img.shields.io/badge/CUDA-12.x-green)](https://developer.nvidia.com/cuda-zone) [![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)](https://kernel.org/) [![RAG](https://img.shields.io/badge/RAG-Graph%20Memory-orange)](#项目介绍) [![LLM](https://img.shields.io/badge/LLM-OpenAI%2FvLLM-purple)](#主要模块) [![Status](https://img.shields.io/badge/Status-Active-success)](#) [![arXiv](https://img.shields.io/badge/arXiv-2508.10419-b31b1b.svg)](https://arxiv.org/abs/2508.10419)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/) [![CUDA](https://img.shields.io/badge/CUDA-12.x-green)](https://developer.nvidia.com/cuda-zone) [![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)](https://kernel.org/) [![RAG](https://img.shields.io/badge/RAG-Graph%20Memory-orange)](#项目介绍) [![LLM](https://img.shields.io/badge/LLM-OpenAI%2FvLLM-purple)](#主要模块) [![Status](https://img.shields.io/badge/Status-Active-success)](#) [![arXiv](https://img.shields.io/badge/arXiv-2508.10419-b31b1b.svg)](https://arxiv.org/abs/2508.10419) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![DeepWiki](https://img.shields.io/badge/DeepWiki-ComoRAG-purple)](https://deepwiki.com/EternityJune25/ComoRAG)
 
 [English](README.md) | [中文](README_zh.md)
 
