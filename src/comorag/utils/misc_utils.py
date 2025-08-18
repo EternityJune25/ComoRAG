@@ -1,0 +1,226 @@
+from argparse import ArgumentTypeError
+from dataclasses import dataclass
+from hashlib import md5
+from pickle import NONE
+import time
+from typing import Dict, Any, List, Tuple, Literal, Union, Optional
+import numpy as np
+import re
+import logging
+
+from wandb import summary
+
+from .typing_utils import Triple
+from .llm_utils import filter_invalid_triples
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class NerRawOutput:
+    chunk_id: str
+    response: str
+    unique_entities: List[str]
+    metadata: Dict[str, Any]
+
+
+@dataclass
+class TripleRawOutput:
+    chunk_id: str
+    response: str
+    triples: List[List[str]]
+    metadata: Dict[str, Any]
+
+@dataclass
+class LinkingOutput:
+    score: np.ndarray
+    type: Literal['node', 'dpr']
+
+    
+
+@dataclass
+class MessagePool:
+    idx: int = None
+    query: str = None
+    chunks: List[List[str]] = None
+    chunks_scores: List[np.ndarray] = None
+    chunks_pool: str = None
+    timeline: List[List[str]] = None
+    timeline_scores: List[np.ndarray] = None
+    timeline_pool: str = None
+    summary: List[List[str]] = None
+    summary_scores: List[np.ndarray] = None
+    summary_pool: str = None
+
+
+    def to_dict(self):
+        return {
+            "query": self.query,
+            "chunks": self.chunks,
+            "chunks_scores": [round(v, 4) for v in self.chunks_scores.tolist()] if self.chunks_scores is not None else None,
+            "chunks_pool": self.chunks_pool,
+            "timeline": self.timeline,
+            "timeline_scores": [round(v, 4) for v in self.timeline_scores.tolist()] if self.timeline_scores is not None else None,
+            "timeline_pool": self.timeline_pool,
+            "summary": self.summary,
+            "summary_scores": [round(v, 4) for v in self.summary_scores.tolist()] if self.summary_scores is not None else None,
+            "summary_pool": self.summary_pool,
+        }
+
+@dataclass
+class QuerySolution:
+    question: str
+    docs: List[str]
+    summary: List[str] = None
+    timeline: List[str] = None
+    doc_scores: np.ndarray = None
+    answer: str = None
+    gold_answers: List[str] = None
+    gold_docs: Optional[List[str]] = None
+
+
+    def to_dict(self):
+        return {
+            "question": self.question,
+            "answer": self.answer,
+            "gold_answers": self.gold_answers,
+            "docs": self.docs[:5],
+            "doc_scores": [round(v, 4) for v in self.doc_scores.tolist()[:5]]  if self.doc_scores is not None else None,
+            "gold_docs": self.gold_docs,
+        }
+
+def text_processing(text):
+    if isinstance(text, list):
+        return [text_processing(t) for t in text]
+    if not isinstance(text, str):
+        text = str(text)
+    return re.sub('[^A-Za-z0-9 ]', ' ', text.lower()).strip()
+
+def reformat_openie_results(corpus_openie_results) -> (Dict[str, NerRawOutput], Dict[str, TripleRawOutput]):
+
+    ner_output_dict = {
+        chunk_item['idx']: NerRawOutput(
+            chunk_id=chunk_item['idx'],
+            response=None,
+            metadata={},
+            unique_entities=list(np.unique(chunk_item['extracted_entities']))
+        )
+        for chunk_item in corpus_openie_results
+    }
+    triple_output_dict = {
+        chunk_item['idx']: TripleRawOutput(
+            chunk_id=chunk_item['idx'],
+            response=None,
+            metadata={},
+            triples=filter_invalid_triples(triples=chunk_item['extracted_triples'])
+        )
+        for chunk_item in corpus_openie_results
+    }
+
+    return ner_output_dict, triple_output_dict
+
+def extract_entity_nodes(chunk_triples: List[List[Triple]]) -> (List[str], List[List[str]]):
+    chunk_triple_entities = []  # a list of lists of unique entities from each chunk's triples
+    for triples in chunk_triples:
+        triple_entities = set()
+        for t in triples:
+            if len(t) == 3:
+                triple_entities.update([t[0], t[2]])
+            else:
+                logger.warning(f"During graph construction, invalid triple is found: {t}")
+        chunk_triple_entities.append(list(triple_entities))
+    graph_nodes = list(np.unique([ent for ents in chunk_triple_entities for ent in ents]))
+    return graph_nodes, chunk_triple_entities
+
+def flatten_facts(chunk_triples: List[Triple]) -> List[Triple]:
+    graph_triples = []  # a list of unique relation triple (in tuple) from all chunks
+    for triples in chunk_triples:
+        graph_triples.extend([tuple(t) for t in triples])
+    graph_triples = list(set(graph_triples))
+    return graph_triples
+
+def min_max_normalize(x):
+    min_val = np.min(x)
+    max_val = np.max(x)
+    range_val = max_val - min_val
+    
+    # Handle the case where all values are the same (range is zero)
+    if range_val == 0:
+        return np.ones_like(x)  # Return an array of ones with the same shape as x
+    
+    return (x - min_val) / range_val
+
+def compute_mdhash_id(content: str, prefix: str = "") -> str:
+    """
+    Compute the MD5 hash of the given content string and optionally prepend a prefix.
+
+    Args:
+        content (str): The input string to be hashed.
+        prefix (str, optional): A string to prepend to the resulting hash. Defaults to an empty string.
+
+    Returns:
+        str: A string consisting of the prefix followed by the hexadecimal representation of the MD5 hash.
+    """
+    return prefix + md5(content.encode()).hexdigest()
+
+
+def all_values_of_same_length(data: dict) -> bool:
+    """
+    Return True if all values in 'data' have the same length or data is an empty dict,
+    otherwise return False.
+    """
+    # Get an iterator over the dictionary's values
+    value_iter = iter(data.values())
+
+    # Get the length of the first sequence (handle empty dict case safely)
+    try:
+        first_length = len(next(value_iter))
+    except StopIteration:
+        # If the dictionary is empty, treat it as all having "the same length"
+        return True
+
+    # Check that every remaining sequence has this same length
+    return all(len(seq) == first_length for seq in value_iter)
+
+
+def string_to_bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise ArgumentTypeError(
+            f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
+        )
+
+def save_results(result_list, output_dir, dataset_name, filename="results.json"):
+    """
+    保存结果到指定目录下的 results.json 文件
+    """
+    import os, json
+    folder_path = os.path.join(output_dir, dataset_name)
+    os.makedirs(folder_path, exist_ok=True)
+    with open(os.path.join(folder_path, filename), "w", encoding="utf-8") as f:
+        json.dump(result_list, f, ensure_ascii=False, indent=2)
+
+def get_gold_answers(samples):
+    gold_answers = []
+    for sample in samples:
+        gold_ans = None
+        if 'answer' in sample or 'golden_answers' in sample:
+            gold_ans = sample['answer'] if 'answer' in sample else sample['golden_answers']
+        elif 'reference' in sample:
+            gold_ans = sample['reference']
+        elif 'obj' in sample:
+            gold_ans = set([sample['obj']] + [sample['possible_answers']] + [sample['o_wiki_title']] + [sample['o_aliases']])
+            gold_ans = list(gold_ans)
+        assert gold_ans is not None
+        if isinstance(gold_ans, str):
+            gold_ans = [gold_ans]
+        assert isinstance(gold_ans, list)
+        gold_ans = set(gold_ans)
+        if 'answer_aliases' in sample:
+            gold_ans.update(sample['answer_aliases'])
+        gold_answers.append(gold_ans)
+    return gold_answers

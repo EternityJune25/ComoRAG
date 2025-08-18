@@ -1,0 +1,92 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytest
+.cache
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Data, logs, outputs
+*.log
+*.out
+*.csv
+*.tsv
+*.pkl
+*.parquet
+*.h5
+*.db
+*.sqlite
+*.npy
+*.npz
+outputs/
+result/
+logs/
+checkpoints/
+dataset/narrativeqa/
+# System files
+.DS_Store
+Thumbs.db
+
+# Model files
+*.pt
+*.ckpt
+*.onnx
+*.pb
+
+# Other
+*.swp
+*.bak
+*.tmp 
