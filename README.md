@@ -210,6 +210,31 @@ netstat -tlnp | grep 8000
 curl http://localhost:8000/v1/models
 ```
 
+### Method 3: Using Local docker compose deployment (main_docker.py) ⚡
+This method deploys everything needed locally. Namely:
+1. vLLM openai server for language model inference
+2. 🤗 HugginFace's Text Embeddings Inference
+3. como-app
+
+#### Requirements
+- docker
+- nvidia device plugin
+
+#### 1. Configure inference services 📝
+
+```bash
+cp .env.example .env
+```
+After cpoying the example environment file adjust environment variables as wanted.
+
+#### 2. Spin-up docker compose deployment
+
+```bash
+docker compose up -d && docker compose logs -f
+```
+
+
+
 ### Comparison of Two Methods 📊
 
 | Feature | OpenAI API (main.py) | vLLM Local (main_vllm.py) |

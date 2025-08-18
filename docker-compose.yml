@@ -1,0 +1,165 @@
+volumes:
+  hf_cache:
+
+services:
+  como-app:
+    build: .
+    # image: nvidia/cuda:11.8.0-base-ubuntu22.04
+    # The key part for CDI GPU access:
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    devices:
+      - nvidia.com/gpu=all
+    env_file: .env
+    ipc: host
+    depends_on:
+      embeddings:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+
+  embeddings:
+    deploy:
+      replicas: 1
+    image: ghcr.io/huggingface/text-embeddings-inference:86-1.8
+    volumes:
+      - hf_cache:/.hf_cache
+    ports:
+      - 8011:8080
+    ipc: host
+    container_name: embeddings
+    # Replace runtime with devices for CDI
+    devices:
+      - nvidia.com/gpu=all
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - USE_FLASH_ATTENTION=True
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - HF_HOME=/.hf_cache
+      - RUST_LOG=info
+      # Performance tuning for embedding models
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+      - TOKENIZERS_PARALLELISM=true
+    restart: no
+    env_file: .env
+    command:
+      [
+        "--model-id",
+        "${EMB_MODEL:-nomic-ai/nomic-embed-text-v1.5}",
+        "--hostname",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--huggingface-hub-cache",
+        "/.hf_cache",
+        "--tokenization-workers",
+        "16",
+        "--max-concurrent-requests",
+        "1024",
+        "--max-batch-tokens",
+        "32768",
+        "--max-batch-requests",
+        "256",
+        "--max-client-batch-size",
+        "64",
+        "--auto-truncate",
+        "--payload-limit",
+        "4000000",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "1"
+
+  vllm:
+    deploy:
+      replicas: 1
+    volumes:
+      - hf_cache:/.hf_cache
+    restart: no
+    image: vllm/vllm-openai:latest
+    ports:
+      - 7373:80
+    device_cgroup_rules:
+      - "c 195:* rmw"
+      - "c 236:* rmw"
+    devices:
+      - nvidia.com/gpu=all
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACEHUB_API_TOKEN:-your_hf_api_access_token}
+      - HF_HOME=/.hf_cache
+      - NVIDIA_VISIBLE_DEVICES=all
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - MAX_PARALLEL_LOADING_WORKERS=4
+    ipc: host
+    env_file: .env
+    command: [
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "80",
+        "--model",
+        "${LLM:-solidrust/Mistral-7B-Instruct-v0.3-AWQ}",
+        "--served-model-name",
+        "como/lm",
+        "--max-model-len",
+        "${LLM_MAX_CONTEXT_LENGTH}",
+        "--max-num-batched-tokens",
+        "${LLM_MAX_CONTEXT_LENGTH}",
+        "--max-seq-len-to-capture",
+        "${LLM_MAX_CONTEXT_LENGTH}",
+        "--kv-cache-dtype",
+        "fp8",
+        "--quantization",
+        "awq",
+        # "--dtype",
+        # "float16",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "mistral", # llama3_json
+        "--chat-template",
+        "examples/tool_chat_template_mistral_parallel.jinja", # tool_chat_template_llama3_json
+        "--cpu-offload-gb",
+        "${LLM_CPU_OFFLOAD_SPACE}",
+        "--gpu-memory-utilization",
+        "0.73",
+        "--use-v2-block-manager",
+        # "--block-size",
+        # "32",
+        "--swap-space",
+        "${LLM_SWAP_SPACE}",
+        # "--trust-remote-code",
+        "--seed",
+        "4269",
+        "--max-num-seqs",
+        "1",
+        "--trust-remote-code",
+        "--enable-prefix-caching",
+        "--enable-chunked-prefill",
+        # "--disable-sliding-window",
+        # "--max-paddings",
+        # "16",
+        # "--enable-chunked-prefill", # Not possible together with prfix caching enabled
+        # "--enforce-eager",
+        # "--max-parallel-loading-workers",
+        # "2"
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://vllm:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
