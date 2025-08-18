@@ -12,6 +12,8 @@ services:
     devices:
       - nvidia.com/gpu=all
     env_file: .env
+    environment:
+      - EMB_MODEL=${EMB_MODEL}
     ipc: host
     depends_on:
       embeddings:
@@ -137,7 +139,6 @@ services:
         "${LLM_CPU_OFFLOAD_SPACE}",
         "--gpu-memory-utilization",
         "0.73",
-        "--use-v2-block-manager",
         # "--block-size",
         # "32",
         "--swap-space",
