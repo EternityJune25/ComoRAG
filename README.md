@@ -31,7 +31,7 @@ This is the **official implementation** of the paper:
 ---
 
 ## Project Introduction
-ComoRAG is a Retrieval-Augmented Generation (RAG) system for long documents and multi-document QA, information extraction, and knowledge graph construction. It integrates various LLMs, embedding models, graph-based reasoning, and evaluation tools, suitable for both research and practical applications.
+ComoRAG is a retrieval-augmented generation (RAG) framework designed for long-document and multi-document tasks, including question answering, information extraction, and knowledge graph construction. It integrates large language models, embedding techniques, graph-based reasoning, and evaluation methodologies, making it suitable for both academic research and real-world applications.
 
 🔥 What makes ComoRAG different?
 
