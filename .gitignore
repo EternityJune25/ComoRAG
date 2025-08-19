@@ -1,3 +1,4 @@
+.env
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -89,4 +90,4 @@ Thumbs.db
 # Other
 *.swp
 *.bak
-*.tmp 
+*.tmp

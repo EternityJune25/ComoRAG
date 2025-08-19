@@ -13,11 +13,14 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+def str_to_bool(val: str) -> bool:
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
 
 @dataclass
 class BaseConfig:
     """One and only configuration."""
-    # LLM specific attributes 
+    # LLM specific attributes
     llm_name: str = field(
         default="gpt-4o-mini",
         metadata={"help": "Class name indicating which LLM model to use."}
@@ -66,7 +69,7 @@ class BaseConfig:
         default=None,
         metadata={"help": "Azure OpenAI embedding endpoint. e.g. https://YOUR_RESOURCE_NAME.openai.azure.com/"}
     )
-    
+
     ## LLM specific attributes -> Async hyperparameters
     max_retry_attempts: int = field(
         default=5,
@@ -107,8 +110,8 @@ class BaseConfig:
         metadata={"help": "Max number of tokens each chunk can contain. If set to None, the whole doc will treated as a single chunk."}
     )
     preprocess_chunk_func: Literal["by_token", "by_word"] = field(default='by_token')
-    
-    
+
+
     # Information extraction specific attributes
     information_extraction_model_name: Literal["openie_openai_gpt", ] = field(
         default="openie_openai_gpt",
@@ -122,8 +125,8 @@ class BaseConfig:
         default=False,
         metadata={"help": "Whether to skip graph construction or not. Set it to be true when running vllm offline indexing for the first time."}
     )
-    
-    
+
+
     # Embedding specific attributes
     embedding_model_name: str = field(
         default="nvidia/NV-Embed-v2",
@@ -145,9 +148,9 @@ class BaseConfig:
         default="auto",
         metadata={"help": "Data type for local embedding model."}
     )
-    
-    
-    
+
+
+
     # Graph construction specific attributes
     synonymy_edge_topk: int = field(
         default=2047,
@@ -169,9 +172,9 @@ class BaseConfig:
         default=False,
         metadata={"help": "Whether the graph is directed or not."}
     )
-    
-    
-    
+
+
+
     # Retrieval specific attributes
     linking_top_k: int = field(
         default=5,
@@ -185,8 +188,8 @@ class BaseConfig:
         default=0.5,
         metadata={"help": "Damping factor for ppr algorithm."}
     )
-    
-    
+
+
     # QA specific attributes
     max_meta_loop_max_iterations : int = field(
         default=5,
@@ -217,7 +220,7 @@ class BaseConfig:
         default=50,
         metadata={"help": "Feeding top k episodics to the QA model for reading."}
     )
-    
+
     is_mc: bool = field(
         default=False,
         metadata={"help": "Whether the question is a multiple choice question."}
@@ -227,7 +230,7 @@ class BaseConfig:
         default=True,
         metadata={"help": "Whether to use the veridical index of the documents in the QA process."}
     )
-    
+
     use_sem: bool = field(
         default= True,
         metadata={"help": "Whether to use the semantic index of the documents in the QA process."}
@@ -260,14 +263,14 @@ class BaseConfig:
         default=None,
         metadata={"help": "Directory to save all related information. If it's given, will overwrite all default save_dir setups. If it's not given, then if we're not running specific datasets, default to `outputs`, otherwise, default to a dataset-customized output dir."}
     )
-    
+
     # Output directory for QA results
     output_dir: str = field(
         default="./outputs/qa_results",
         metadata={"help": "Directory to save QA results."}
     )
-    
-    
+
+
     # Dataset running specific attributes
     ## Dataset running specific attributes -> General
     dataset: Optional[Literal['hotpotqa', 'hotpotqa_train', 'musique', '2wikimultihopqa']] = field(
@@ -276,10 +279,10 @@ class BaseConfig:
     )
     ## Dataset running specific attributes -> Graph
     graph_type: Literal[
-        'dpr_only', 
-        'entity', 
+        'dpr_only',
+        'entity',
         'passage_entity', 'relation_aware_passage_entity',
-        'passage_entity_relation', 
+        'passage_entity_relation',
         'facts_and_sim_passage_node_unidirectional',
     ] = field(
         default="facts_and_sim_passage_node_unidirectional",
@@ -289,8 +292,8 @@ class BaseConfig:
         default=None,
         metadata={"help": "Length of the corpus to use."}
     )
-    
-    
+
+
     def __post_init__(self):
         if self.save_dir is None: # If save_dir not given
             if self.dataset is None: self.save_dir = 'outputs' # running freely

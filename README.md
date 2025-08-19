@@ -210,6 +210,113 @@ netstat -tlnp | grep 8000
 curl http://localhost:8000/v1/models
 ```
 
+### Method 3: Using Local docker compose deployment (main_docker.py) ⚡
+This method deploys everything needed locally. Namely:
+1. vLLM openai server for language model inference
+2. 🤗 HugginFace's Text Embeddings Inference (HF TEI)
+3. como-app
+
+#### Requirements
+- docker
+- nvidia device plugin
+
+#### 1. Configure inference services 📝
+
+```bash
+cp .env.example .env
+```
+After cpoying the example environment file adjust environment variables as wanted.
+
+#### 2. Pull, build and spin-up docker compose deployment
+
+```bash
+docker compose up -d && docker compose logs -f
+```
+
+#### 4. Check Deployment Services' Status 🔍
+Following the deployment of the application stack. Both HF TEI and vllm need to download models.
+
+The `como-app` is only started once both these are up and running healthy.
+```logs
+[+] Running 3/3
+ ✔ Container comorag-vllm-1      Healthy                                                                                                                                                                         1.0s
+ ✔ Container embeddings          Healthy                                                                                                                                                                        16.0s
+ ✔ Container comorag-como-app-1  Started
+ ```
+
+##### Check HF TEI logs
+```bash
+docker compose logs -f embeddings
+```
+
+Wait until you see the following:
+```logs
+...
+embeddings  | 2025-08-18T16:20:13.621603Z  INFO text_embeddings_router: router/src/lib.rs:239: Starting model backend
+embeddings  | 2025-08-18T16:20:13.623965Z  INFO text_embeddings_backend: backends/src/lib.rs:516: Downloading `model.safetensors`
+embeddings  | 2025-08-18T16:20:13.624022Z  INFO text_embeddings_backend: backends/src/lib.rs:395: Model weights downloaded in 63.05µs
+embeddings  | 2025-08-18T16:20:13.998327Z  INFO text_embeddings_backend_candle: backends/candle/src/lib.rs:412: Starting FlashNomicBert model on Cuda(CudaDevice(DeviceId(1)))
+embeddings  | 2025-08-18T16:20:23.549330Z  INFO text_embeddings_router: router/src/lib.rs:257: Warming up model
+embeddings  | 2025-08-18T16:20:23.945749Z  INFO text_embeddings_router::http::server: router/src/http/server.rs:1852: Starting HTTP server: 0.0.0.0:8080
+embeddings  | 2025-08-18T16:20:23.945762Z  INFO text_embeddings_router::http::server: router/src/http/server.rs:1853: Ready
+```
+
+##### Check vLLM logs
+```bash
+docker compose logs -f vllm
+```
+
+Wait until you see the following:
+```logs
+...
+vllm-1  | INFO 08-18 09:29:55 [api_server.py:1818] Starting vLLM API server 0 on http://0.0.0.0:80
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:29] Available routes are:
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /openapi.json, Methods: HEAD, GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /docs, Methods: HEAD, GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /redoc, Methods: HEAD, GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /health, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /load, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /ping, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /ping, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /tokenize, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /detokenize, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/models, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /version, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/responses, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/responses/{response_id}, Methods: GET
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/responses/{response_id}/cancel, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/chat/completions, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/completions, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/embeddings, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /pooling, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /classify, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /score, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/score, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/audio/transcriptions, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/audio/translations, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /rerank, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v1/rerank, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /v2/rerank, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /scale_elastic_ep, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /is_scaling_elastic_ep, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /invocations, Methods: POST
+vllm-1  | INFO 08-18 09:29:55 [launcher.py:37] Route: /metrics, Methods: GET
+vllm-1  | INFO:     Started server process [1]
+vllm-1  | INFO:     Waiting for application startup.
+vllm-1  | INFO:     Application startup complete.
+```
+
+##### ComoRAG
+Now attach to the como-app to see its logs.
+```bash
+docker compose logs -f como-app
+```
+
+For example:
+```logs
+```
+
 ### Comparison of Two Methods 📊
 
 | Feature | OpenAI API (main.py) | vLLM Local (main_vllm.py) |
