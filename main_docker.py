@@ -65,7 +65,7 @@ def main():
     dataset_dirs.sort()
     dataset_paths = [os.path.join(base_path, d) for d in dataset_dirs]
 
-    vllm_base_url = "http://vllm:8000/v1"
+    vllm_base_url = "http://vllm:80/v1"
     served_model_name = "como/lm"
     embedding_model_name = os.environ["EMB_MODEL"]
     output_dir = os.environ["OUT_DIR"]
