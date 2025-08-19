@@ -1,37 +1,39 @@
+import numpy as np
 import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
-class TEITokenizer:
-    def __init__(self, base_url: str = "http://embeddings:8080", timeout: int = 30):
-        """
-        base_url: Base URL of the TEI service (e.g. http://embeddings:8080 if running locally)
-        """
+class HFTEIEmbedding:
+    def __init__(self, global_config, base_url: str = "http://embeddings:8080", embedding_model_name = "", timeout: int = 30):
+        logger.debug("Global Config: {global_config}")
+        logger.warning("input name: {embedding_model_name}. Make sure you did load it with HF TEI!")
+
+        self.global_config = global_config
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def encode(self, text: str) -> list[int]:
-        """Tokenize a single string and return list of token IDs"""
-        url = f"{self.base_url}/tokenize"
-        payload = {"inputs": text}
-        try:
-            response = requests.post(url, json=payload, timeout=self.timeout)
-            response.raise_for_status()
-            tokens = response.json()  # TEI returns tokenized ids
-            return tokens[0] if isinstance(tokens, list) and tokens else []
-        except Exception as e:
-            logger.error(f"TEI tokenization failed: {e}")
-            return []
+    def batch_encode(self, texts: list[str], instruction: str = None, norm: bool = True) -> np.ndarray:
+        """
+        Encode a batch of texts using Hugging Face TEI `/embed`.
+        Returns numpy array of shape (batch_size, embedding_dim).
+        """
+        if not texts:
+            return np.empty((0, 0), dtype=np.float32)
 
-    def batch_encode(self, texts: list[str]) -> list[list[int]]:
-        """Tokenize multiple strings at once"""
-        url = f"{self.base_url}/tokenize"
-        payload = {"inputs": texts}
+        url = f"{self.base_url}/embed"
+        payload = {"inputs": texts, "normalize": norm}
+        if instruction:
+            payload["prompt_name"] = instruction
+
         try:
-            response = requests.post(url, json=payload, timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()  # list of token ID lists
+            resp = requests.post(url, json=payload, timeout=self.timeout)
+            resp.raise_for_status()
+            embeddings = resp.json()  # [[float, ...], [float, ...]]
+            embeddings = [np.array(e, dtype=np.float32) for e in embeddings if e]
+            if not embeddings:
+                raise ValueError("Empty embeddings returned from TEI")
+            return np.vstack(embeddings)
         except Exception as e:
-            logger.error(f"TEI batch tokenization failed: {e}")
-            return [[] for _ in texts]
+            logger.error(f"TEI embedding failed: {e}")
+            return np.zeros((len(texts), 1), dtype=np.float32)

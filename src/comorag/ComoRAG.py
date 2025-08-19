@@ -35,14 +35,15 @@ from .rerank import DSPyFilter
 from .utils.misc_utils import *
 from .utils.embed_utils import retrieve_knn
 from .utils.typing_utils import Triple
-from .utils.config_utils import BaseConfig
+from .utils.config_utils import BaseConfig, str_to_bool
 from .utils.cluster_utils import ChunkSoftClustering
 from .utils.memory_utils import MemoryNode, MemoryPool, NodeType
 
 logger = logging.getLogger(__name__)
 
-LOCAL_DOCKER = os.environ["LOCAL_DOCKER"]
+LOCAL_DOCKER = str_to_bool(os.getenv("LOCAL_DOCKER", "false"))
 logger.info(f"LOCAL_DOCKER: {LOCAL_DOCKER} {type(LOCAL_DOCKER)}")
+
 class ComoRAG:
     def __init__(self, global_config=None,
                  save_dir=None,
