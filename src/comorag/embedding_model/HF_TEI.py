@@ -8,7 +8,6 @@ class HFTEIEmbedding:
     def __init__(self, global_config, base_url: str = "http://embeddings:8080", embedding_model_name = "", timeout: int = 30):
         logger.debug("Global Config: {global_config}")
         logger.warning("input name: {embedding_model_name}. Make sure you did load it with HF TEI!")
-
         self.global_config = global_config
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
