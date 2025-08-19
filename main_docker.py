@@ -1,10 +1,12 @@
 import os
 import json
 import copy
-
 from src.comorag.ComoRAG import ComoRAG
 from src.comorag.utils.config_utils import BaseConfig
 from src.comorag.utils.misc_utils import get_gold_answers
+from src.comorag.utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def process_dataset(dataset_path, config):
@@ -48,27 +50,24 @@ def process_dataset(dataset_path, config):
 
 
 def main():
-    # 1) Start a vLLM OpenAI-compatible server separately, e.g.:
-    # vllm serve /path/to/your/model --tensor-parallel-size 1 --max_model_len 4096*2 --gpu-memory-utilization 0.95
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "all")
 
-    # 2) Then run this script. We will call the server via base_url.
-    # Ensure an API key is present for OpenAI-compatible clients
-    os.environ["OPENAI_API_KEY"] = "your-api-key-here"
+    # os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 
-    # Optional: select visible GPUs for the client side
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+    dataset_name = os.environ["DATASET"]
 
-    base_path = "./dataset/cinderella"
+    base_path = f"./dataset/{dataset_name}"
+
     dataset_dirs = [
         d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))
     ]
+
     dataset_dirs.sort()
     dataset_paths = [os.path.join(base_path, d) for d in dataset_dirs]
 
     vllm_base_url = "http://vllm:8000/v1"
     served_model_name = "como/lm"
     embedding_model_name = os.environ["EMB_MODEL"]
-    dataset_name = os.environ["DATASET"]
     output_dir = os.environ["OUT_DIR"]
     save_dir = os.environ["SAVE_DIR"]
 

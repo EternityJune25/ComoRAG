@@ -9,8 +9,9 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install requirements
-COPY . .
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
+COPY . .
 
 # Set environment variables
 ENV PYTHONPATH=/app

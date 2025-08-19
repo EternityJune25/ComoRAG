@@ -17,14 +17,15 @@ import re
 import concurrent.futures
 from transformers import AutoTokenizer
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from .embedding_model.TEITokenizer import TEITokenizer
 from .utils.embed_utils import get_similar_summaries
 from .utils import agents
 from src.comorag.utils.timeline_utils import TimelineSummarizer
 from src.comorag.utils.summarization_utils import GPT4SummarizationModel
 
 from .llm import _get_llm_class, BaseLLM
-from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
+from .embedding_model import _get_embedding_model_class
+from .embedding_model.base import BaseEmbeddingModel
 from .embedding_store import EmbeddingStore
 from .information_extraction import OpenIE
 from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
@@ -40,10 +41,12 @@ from .utils.memory_utils import MemoryNode, MemoryPool, NodeType
 
 logger = logging.getLogger(__name__)
 
+LOCAL_DOCKER = os.environ["LOCAL_DOCKER"]
+logger.info(f"LOCAL_DOCKER: {LOCAL_DOCKER} {type(LOCAL_DOCKER)}")
 class ComoRAG:
-    def __init__(self, global_config=None, 
-                 save_dir=None, 
-                 llm_model_name=None, 
+    def __init__(self, global_config=None,
+                 save_dir=None,
+                 llm_model_name=None,
                  llm_base_url=None,
                  llm_api_key=None,
                  embedding_model_name=None,
@@ -118,22 +121,22 @@ class ComoRAG:
             self.sem_embedding_store = EmbeddingStore(self.embedding_model,
                                                    os.path.join(self.working_dir, "summary_embeddings"),
                                                    self.global_config.embedding_batch_size, 'summary')
-            
+
             self.epi_embedding_store = EmbeddingStore(self.embedding_model,
                                                    os.path.join(self.working_dir, "timeline_embeddings"),
                                                    self.global_config.embedding_batch_size, 'timeline')
-            
 
-            
+
+
             self.summarization_model = GPT4SummarizationModel(self.global_config.llm_name,self.global_config.llm_base_url,self.global_config.llm_api_key)
             self.timeline_summarizer = TimelineSummarizer(
                 chunk_embedding_store=self.ver_embedding_store,
                 summary_embedding_store=self.epi_embedding_store,
                 summarization_model=self.summarization_model
             )
-            
 
-            if not self.flag_cluster:                       
+
+            if not self.flag_cluster:
                 self.clustering = ChunkSoftClustering(
                     embedding_store=self.ver_embedding_store,
                     reduction_dimension=10,
@@ -146,7 +149,7 @@ class ComoRAG:
                     llm_base_url=self.global_config.llm_base_url,
                     llm_api_key=self.global_config.llm_api_key
                 )
-                
+
             self.timeline_summarizer.load_all_summaries()
             self.level_store = self.timeline_summarizer.get_level_embedding_store(0)
 
@@ -156,8 +159,12 @@ class ComoRAG:
         self.max_tokens_epi = self.global_config.max_tokens_epi
         self.level_store = self.timeline_summarizer.get_level_embedding_store(0)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.global_config.embedding_model_name)
-        
+        if LOCAL_DOCKER:
+            self.tokenizer = TEITokenizer
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.global_config.embedding_model_name)
+
+
     def initialize_graph(self):
         self._graphml_xml_file = os.path.join(
             self.working_dir, f"graph.graphml"
@@ -180,7 +187,7 @@ class ComoRAG:
     def pre_openie(self,  docs: List[str]):
         logger.info(f"Indexing Documents")
         logger.info(f"Performing OpenIE Offline")
-        
+
         chunks = self.ver_embedding_store.get_missing_string_hash_ids(docs)
 
         all_openie_info, chunk_keys_to_process = self.load_existing_openie(chunks.keys())
@@ -211,12 +218,12 @@ class ComoRAG:
                 self.global_config.embedding_batch_size,
                 'timeline'
             )
-            
+
             self.timeline_summarizer.try_load_or_generate_summaries(timeline_dir)
             self.timeline_summarizer.load_all_summaries()
             self.level_store = self.timeline_summarizer.get_level_embedding_store(0)
 
-        if self.global_config.need_cluster and not self.flag_cluster:  
+        if self.global_config.need_cluster and not self.flag_cluster:
             all_summaries, final_summary = self._recursive_clustering(
                 [self.ver_embedding_store.get_row(hash_id)['content'] for hash_id in self.ver_embedding_store.get_all_ids()],
                 max_iterations=5  # Set maximum iteration count
@@ -234,12 +241,12 @@ class ComoRAG:
             self.merge_openie_results(all_openie_info, new_openie_rows, new_ner_results_dict, new_triple_results_dict)
         if self.global_config.save_openie:
             self.save_openie_results(all_openie_info)
-        ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)    
+        ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)
         assert len(chunks) == len(ner_results_dict) == len(triple_results_dict)
 
         # prepare data_store
         chunk_ids = list(chunks.keys())
-        
+
         chunk_triples = [[text_processing(t) for t in triple_results_dict[chunk_id].triples] for chunk_id in chunk_ids]
         entity_nodes, chunk_triple_entities = extract_entity_nodes(chunk_triples)
         facts = flatten_facts(chunk_triples)
@@ -283,15 +290,15 @@ class ComoRAG:
 
         docs, nodes = self.tri_retrieve(retrieve_query, memory_pool)
         memory_pool = self.mem_encode(query=retrieve_query, docs=docs, memory_pool=memory_pool)
-        
+
         ver_context = "\n".join([ver for node in memory_pool.get_temp_nodes_by_type(NodeType.VER) for ver in node.original_content])
         sem_context = "\n".join([sem for node in memory_pool.get_temp_nodes_by_type(NodeType.SEM) for sem in node.original_content])
         epi_context = "\n".join([epi for node in memory_pool.get_temp_nodes_by_type(NodeType.EPI) for epi in node.original_content])
-        
+
         historical_infomation = ""
-        all_steps = [] 
+        all_steps = []
         step_answers_local = {}
-        
+
         for i in range(self.global_config.max_meta_loop_max_iterations+1):
             step_info = {
                 "step": i + 1,
@@ -309,11 +316,11 @@ class ComoRAG:
                 prompt_user += f"### Semantic Summary\n{sem_context}\n\n"
             if self.global_config.use_epi:
                 prompt_user += f"### Timeline Summary\n{epi_context}\n\n"
-            
+
             if i != 0:
                 prompt_user += f"### Historical Information\n{historical_infomation}\n\n"
 
-            prompt_user += 'Question: ' + query + '\nThought: ' 
+            prompt_user += 'Question: ' + query + '\nThought: '
             if self.global_config.is_mc:
                 if i == 0:
                     qa_message = self.prompt_template_manager.render(name=f'rag_qa_mc', prompt_user=prompt_user)
@@ -321,7 +328,7 @@ class ComoRAG:
                     qa_message = self.prompt_template_manager.render(name=f'rag_qa_mc_memory', prompt_user=prompt_user)
             else:
                 qa_message = self.prompt_template_manager.render(name=f'rag_qa_narrativeqa', prompt_user=prompt_user)
-                
+
             result = self.llm_model.infer(qa_message)
             # try:
             if result is None:
@@ -329,14 +336,14 @@ class ComoRAG:
                 step_info["error"] = "LLM returned None response"
                 all_steps.append(step_info)
                 continue
-                
+
             response_content = result[0] if isinstance(result, (list, tuple)) else result
             if not response_content:
                 logger.error("Empty response content from LLM")
                 step_info["error"] = "Empty response content from LLM"
                 all_steps.append(step_info)
                 continue
-                
+
             try:
                 pred_ans = response_content.split('### Final Answer')[1].strip()
             except IndexError:
@@ -359,7 +366,7 @@ class ComoRAG:
                 # mem-fusion
                 historical_infomation = memory_pool.create_fusion_content(probe=retrieve_query,top_k_percent=0.5)
                 memory_pool.add_fused_node(probe=retrieve_query, fused_content=historical_infomation, source_nodes=nodes)
-                
+
                 sem_context = "\n".join([node.cue for node in memory_pool.get_temp_nodes_by_type(NodeType.SEM)])
                 epi_context = "\n".join([node.cue for node in memory_pool.get_temp_nodes_by_type(NodeType.EPI)])
                 ver_context = "\n".join([node.cue for node in memory_pool.get_temp_nodes_by_type(NodeType.VER)])
@@ -367,20 +374,20 @@ class ComoRAG:
                 historical_infomation = ""
                 for node in memory_pool.get_temp_nodes_by_type(NodeType.FUSION):
                     historical_infomation += f"probe : {node.probe}\nFinding : {node.cue}\n"
-                
+
                 for node in memory_pool.get_nodes_by_type(NodeType.FUSION):
                     historical_infomation += f"probe : {node.probe}\nFinding : {node.cue}\n"
                 all_steps.append(step_info)
             else:
-                all_steps.append(step_info)         
+                all_steps.append(step_info)
                 break
 
-            
-                
+
+
 
         query_solution = QuerySolution(question=query, docs=ver_context, summary=sem_context, timeline=epi_context)
         query_solution.answer = response_content
-        
+
 
 
         pool_info = {
@@ -391,10 +398,10 @@ class ComoRAG:
             "total_probes": len(memory_pool.get_all_probes()),
             "probes": memory_pool.get_all_probes()
         }
-        
+
         output_dir = os.path.join(self.global_config.output_dir, 'details')
         os.makedirs(output_dir, exist_ok=True)
-        
+
 
         with open(os.path.join(output_dir, f"pool_info_{q_idx}.json"), 'w', encoding='utf-8') as f:
             json.dump(pool_info, f, ensure_ascii=False, indent=4)
@@ -433,25 +440,25 @@ class ComoRAG:
         queries_solutions = []
         step_answers = {}
         self.level_store = self.timeline_summarizer.get_level_embedding_store(0)
-        max_workers = min(16, len(queries)) 
+        max_workers = min(16, len(queries))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_query = {
-                executor.submit(self.meta_control_loop, q_idx, query): q_idx 
+                executor.submit(self.meta_control_loop, q_idx, query): q_idx
                 for q_idx, query in enumerate(queries)
             }
 
-            
+
             queries_solutions = [None] * len(queries)
             step_answers = {}
             for future in tqdm(as_completed(future_to_query), total=len(queries), desc="Processing Queries"):
                 q_idx, query_solution, step_answers_local = future.result()
                 if query_solution:
-                    queries_solutions[q_idx] = query_solution  
+                    queries_solutions[q_idx] = query_solution
                     step_answers[q_idx] = step_answers_local
 
         queries_solutions = [qs for qs in queries_solutions if qs is not None]
         return queries_solutions
-    
+
     #tri-retrieve
     def tri_retrieve(self, query: str, memory_pool: MemoryPool, ver_top_k: int = None, sem_top_k: int = None, epi_top_k: int = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         ver_top_k = self.global_config.qa_ver_top_k if hasattr(self.global_config, 'qa_ver_top_k') else ver_top_k
@@ -463,7 +470,7 @@ class ComoRAG:
         sem_hashes = all_hashes.get(NodeType.SEM, [])
         epi_hashes = all_hashes.get(NodeType.EPI, [])
 
-        
+
         if not self.ready_to_retrieve:
             self.prepare_retrieval_objects()
 
@@ -509,7 +516,7 @@ class ComoRAG:
         retrieved_passages = top_k_docs
         retrieved_passages_sorted = sorted(retrieved_passages,key=lambda doc: hash_id_to_order.get(text_to_hash_id.get(doc), float('inf')))
         top_k_docs = retrieved_passages_sorted
-        
+
 
         # Semantic Index Retrieval
         sorted_sem_ids, sorted_sem_scores = self.dense_passage_retrieval(query, need_cluster=True)
@@ -520,7 +527,7 @@ class ComoRAG:
 
         if len(sem_hashes) > 0:
             top_k_sem = [sem for sem in top_k_sem if text_to_hash_id[sem] not in sem_hashes]
-        
+
 
         ### Episodic Index Retrieval
         top_k_epi, sorted_epi_scores = get_similar_summaries(
@@ -530,17 +537,17 @@ class ComoRAG:
                 top_k=epi_top_k
             )
         top_k_epi = top_k_epi[:epi_top_k]
-        
+
         # epi result
         if len(top_k_epi) > 0:
             text_to_hash_id = self.level_store.text_to_hash_id
             top_k_epi_hashes = [text_to_hash_id[doc] for doc in top_k_epi]
-        
+
         if len(epi_hashes) > 0:
             top_k_epi = [epi for epi in top_k_epi if text_to_hash_id[epi] not in epi_hashes]
 
         hash_id_to_order = self.level_store.get_hash_id_to_order()
-        text_to_hash_id =  self.level_store.text_to_hash_id  
+        text_to_hash_id =  self.level_store.text_to_hash_id
         retrieved_passages = top_k_epi
         retrieved_passages_sorted = sorted(retrieved_passages,
                                         key=lambda doc: hash_id_to_order.get(text_to_hash_id.get(doc), float('inf')))
@@ -563,7 +570,7 @@ class ComoRAG:
                 break
             selected_vers.append(ver)
             current_tokens += ver_tokens
-        
+
         selected_sems = []
         current_tokens = 0
         for sem in docs["semantic"]:
@@ -572,7 +579,7 @@ class ComoRAG:
                 break
             selected_sems.append(sem)
             current_tokens += sem_tokens
-        
+
         selected_epis = []
         current_tokens = 0
         for epi in docs["episodic"]:
@@ -582,17 +589,17 @@ class ComoRAG:
             selected_epis.append(epi)
             current_tokens += epi_tokens
 
-        
+
         pool_agent = memory_pool.agent
         ver_cue, sem_cue, epi_cue = pool_agent.fusion(
-            query=query, 
-            vers="\n".join(selected_vers), 
-            sems="\n".join(selected_sems), 
-            epis="\n".join(selected_epis), 
+            query=query,
+            vers="\n".join(selected_vers),
+            sems="\n".join(selected_sems),
+            epis="\n".join(selected_epis),
         )
-        
 
-        
+
+
         # Memory Nodes Generation
         ver_node = MemoryNode(
             probe=probe if probe else query,
@@ -601,7 +608,7 @@ class ComoRAG:
             cue=ver_cue
         )
         ver_node.update_hashes()
-        
+
         sem_node = MemoryNode(
             probe=probe if probe else query,
             node_type=NodeType.SEM,
@@ -609,19 +616,19 @@ class ComoRAG:
             cue=sem_cue
         )
         sem_node.update_hashes()
-        
+
         epi_node = MemoryNode(
             probe=probe if probe else query,
             node_type=NodeType.EPI,
             original_content=selected_epis,
-            cue=epi_cue 
+            cue=epi_cue
         )
         epi_node.update_hashes()
-        
+
         memory_pool.add_to_temp_pool(ver_node)
         memory_pool.add_to_temp_pool(sem_node)
         memory_pool.add_to_temp_pool(epi_node)
-        
+
         return memory_pool
 
     def add_fact_edges(self, chunk_ids: List[str], chunk_triples: List[Tuple]):
@@ -655,7 +662,7 @@ class ComoRAG:
             current_graph_nodes = set()
         num_new_chunks = 0
 
-        logger.info(f"Connecting passage nodes to phrase nodes.")   
+        logger.info(f"Connecting passage nodes to phrase nodes.")
         for idx, chunk_key in tqdm(enumerate(chunk_ids)):
             if chunk_key not in current_graph_nodes:
                 for chunk_ent in chunk_triple_entities[idx]:
@@ -674,7 +681,7 @@ class ComoRAG:
         entity_node_keys = list(self.entity_id_to_row.keys())
         logger.info(f"Performing KNN retrieval for each phrase nodes ({len(entity_node_keys)}).")
         entity_embs = self.entity_embedding_store.get_embeddings(entity_node_keys)
-        
+
         query_node_key2knn_node_keys = retrieve_knn(query_ids=entity_node_keys,
                                                     key_ids=entity_node_keys,
                                                     query_vecs=entity_embs,
@@ -935,7 +942,7 @@ class ComoRAG:
                 self.query_to_embedding['passage'][query] = embedding
 
     def get_fact_scores(self, query: str) -> np.ndarray:
- 
+
         query_embedding = self.query_to_embedding['triple'].get(query, None)
         if query_embedding is None:
             query_embedding = self.embedding_model.batch_encode(query,
@@ -953,7 +960,7 @@ class ComoRAG:
             query_embedding = self.embedding_model.batch_encode(query,
                                                                 instruction=get_query_instruction('query_to_passage'),
                                                                 norm=True)
-      
+
         if need_cluster:
             query_doc_scores = np.dot(self.summary_embeddings, query_embedding.T)
         else:
@@ -979,7 +986,7 @@ class ComoRAG:
         top_k_phrases = set(linking_score_map.keys())
         top_k_phrases_keys = set(
             [compute_mdhash_id(content=top_k_phrase, prefix="entity-") for top_k_phrase in top_k_phrases])
-        
+
         for phrase_key in self.node_name_to_vertex_idx:
             if phrase_key not in top_k_phrases_keys:
                 phrase_id = self.node_name_to_vertex_idx.get(phrase_key, None)
@@ -995,9 +1002,9 @@ class ComoRAG:
                                         top_k_facts: List[Tuple],
                                         top_k_fact_indices: List[str],
                                         passage_node_weight: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
-    
-        linking_score_map = {}  # from phrase to the average scores of the facts that contain the phrase 
-        phrase_scores = {}  # store all fact scores for each phrase regardless of whether they exist in the knowledge graph or not 
+
+        linking_score_map = {}  # from phrase to the average scores of the facts that contain the phrase
+        phrase_scores = {}  # store all fact scores for each phrase regardless of whether they exist in the knowledge graph or not
         phrase_weights = np.zeros(len(self.graph.vs['name']))
         passage_weights = np.zeros(len(self.graph.vs['name']))
         used_phrases_with_scores = {}
@@ -1042,7 +1049,7 @@ class ComoRAG:
             linking_score_map[passage_node_text] = passage_dpr_score * passage_node_weight
 
         node_weights = phrase_weights + passage_weights
-        
+
 
         if len(linking_score_map) > 30:
             linking_score_map = dict(sorted(linking_score_map.items(), key=lambda x: x[1], reverse=True)[:30])
@@ -1082,7 +1089,7 @@ class ComoRAG:
 
         rerank_log = {'facts_before_rerank': candidate_facts, 'facts_after_rerank': top_k_facts}
         return top_k_fact_indices, top_k_facts, rerank_log
-    
+
     def run_ppr(self,
                 reset_prob: np.ndarray,
                 damping: float =0.5) -> Tuple[np.ndarray, np.ndarray]:
@@ -1103,12 +1110,12 @@ class ComoRAG:
         sorted_doc_scores = doc_scores[sorted_doc_ids.tolist()]
 
         return sorted_doc_ids, sorted_doc_scores
-    
+
     def _recursive_clustering(self, texts, max_iterations=5, current_iteration=0):
         # Create temporary folder paths
         temp_embeddings_dir = os.path.join(self.working_dir, "temp_embeddings")
         temp_clusters_dir = os.path.join(self.working_dir, "temp_clusters")
-        
+
         # Define cleanup function
         def cleanup_temp_folders():
             try:
@@ -1121,16 +1128,16 @@ class ComoRAG:
                     print(f"Deleted temporary clusters folder: {temp_clusters_dir}")
             except Exception as e:
                 print(f"Error cleaning up temporary folders: {e}")
-        
+
         # Early return cases
         if len(texts) <= 1:
             cleanup_temp_folders()
             return texts, texts
-            
+
         if current_iteration >= max_iterations:
             cleanup_temp_folders()
             return texts, [texts[0]]
-        
+
         try:
             temp_embedding_store = EmbeddingStore(
                 self.embedding_model,
@@ -1138,9 +1145,9 @@ class ComoRAG:
                 self.global_config.embedding_batch_size,
                 'temp'
             )
-            
+
             temp_embedding_store.insert_strings(texts)
-            
+
             clustering = ChunkSoftClustering(
                 embedding_store=temp_embedding_store,
                 reduction_dimension=10,
@@ -1153,41 +1160,41 @@ class ComoRAG:
                 llm_base_url=self.global_config.llm_base_url,
                 llm_api_key=self.global_config.llm_api_key
             )
-            
+
             clusters = clustering.perform_clustering()
-            
+
             stats = clustering.get_cluster_stats()
             print(f"Clustering stats: {stats}")
-            
+
             summary_texts = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, len(clusters))) as executor:
                 future_to_cluster = {
-                    executor.submit(clustering.create_cluster_summary, cluster.id): cluster 
+                    executor.submit(clustering.create_cluster_summary, cluster.id): cluster
                     for cluster in clusters
                 }
-                
+
                 for future in concurrent.futures.as_completed(future_to_cluster):
                     try:
                         summary = future.result()
-                        if summary:  
+                        if summary:
                             summary_texts.append(summary)
                     except Exception as e:
                         logger.error(f"error: {str(e)}")
-            
+
             # Clean up temporary folders for current level
             cleanup_temp_folders()
-            
+
             # Recursively process next level
             if len(summary_texts) == 1:
                 return summary_texts, summary_texts
-            
+
             next_level_summaries, final_summary = self._recursive_clustering(
-                summary_texts, 
+                summary_texts,
                 max_iterations=max_iterations,
                 current_iteration=current_iteration + 1
             )
             return summary_texts + next_level_summaries, final_summary
-            
+
         except Exception as e:
             # Ensure temporary folders are cleaned up even in case of exceptions
             print(f"Error during recursive clustering: {e}")
