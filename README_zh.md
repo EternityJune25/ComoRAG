@@ -270,4 +270,4 @@ python script/eval_qa.py /path/to/result/<dataset>/<subset>
 
 ## Star History ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?repos=EternityJune25/ComoRAG&type=Date)](https://star-history.com/#OSU-NLP-Group/ComoRAG&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=EternityJune25/ComoRAG&type=Date)](https://star-history.com/#EternityJune25/ComoRAG&Date)
