@@ -258,6 +258,16 @@ This produces files like ``details`、`results.json`, etc.
 
 ---
 
+## Known Issues & TODO 📝
+
+### 🔧 Current Issues
+- [ ] **Remote Embedding Model Tokenizer Issue**: When using remote vLLM-deployed embedding models, fails due to missing local model files. Need to support local tokenizer for remote embedding models.
+
+### 🚀 Planned Features
+- [ ] Support for more embedding model providers (Azure OpenAI, etc.)
+
+---
+
 ## Contact & Contribution 🤝
 For questions or suggestions, feel free to submit an Issue or PR.
 
