@@ -265,3 +265,9 @@ For questions or suggestions, feel free to submit an Issue or PR.
 
 ## Acknowledgement 🙏
 We refer to the repository of [HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG) as a skeleton code.
+
+---
+
+## Star History ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=EternityJune25/ComoRAG&type=Date)](https://star-history.com/#OSU-NLP-Group/ComoRAG&Date)

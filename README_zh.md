@@ -265,3 +265,9 @@ python script/eval_qa.py /path/to/result/<dataset>/<subset>
 
 ## 致谢
 本项目参考了 [HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG) 仓库的骨架代码。
+
+---
+
+## Star History ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=EternityJune25/ComoRAG&type=Date)](https://star-history.com/#OSU-NLP-Group/ComoRAG&Date)
